@@ -3,6 +3,8 @@ import gradio as gr
 import pandas as pd
 import numpy as np
 import requests
+from sklearn.preprocessing import MinMaxScaler
+
 
 API_KEY = "f5165b88f19a84ebf4d50c4788ff8fb3"
 BASE_URL = "https://image.tmdb.org/t/p/w500"
@@ -134,12 +136,11 @@ def hybrid_recommender(user_input, top_k=5):
             idx = movie_id_to_idx[mid]
             sCF_full[idx] = score
 
-    from sklearn.preprocessing import MinMaxScaler
     scaler = MinMaxScaler()
     sCF_norm = scaler.fit_transform(sCF_full.reshape(-1,1)).flatten()
     sCB_norm = scaler.fit_transform(sCB.reshape(-1,1)).flatten()
 
-    alpha = 0.7  # adjust if needed
+    alpha = 0.7 
     s_hyb = alpha * sCF_norm + (1 - alpha) * sCB_norm
 
     top_indices = s_hyb.argsort()[::-1][:top_k]
