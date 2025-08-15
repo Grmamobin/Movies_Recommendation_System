@@ -55,7 +55,7 @@ def popularity_recommender(movie_title, top_k=5):
 
 def content_recommender(movie_title, top_k=5):
     if movie_title not in df['title'].values:
-        return ["Movie Not Found"]*top_k, [""]*top_k, [""]*top_k
+        return ["Movie Not Found"]*top_k, [""]*top_k, ["https://via.placeholder.com/500x750?text=No+Image"]*top_k, [""]*top_k
 
     idx = df[df['title'] == movie_title].index[0]
     sim_scores = list(enumerate(sig[idx]))
@@ -66,34 +66,56 @@ def content_recommender(movie_title, top_k=5):
     overviews = list(df['overview'].iloc[movie_indices]) if 'overview' in df.columns else [""]*len(movie_indices)
 
     poster_urls = []
-    for movie_id in df['id'].iloc[movie_indices]:
-        url = f"https://api.themoviedb.org/3/movie/{movie_id}?api_key={API_KEY}"
-        response = requests.get(url)
-        data = response.json()
-        poster_path = data.get('poster_path')
-        if poster_path:
-            poster_urls.append(BASE_URL + poster_path)
-        else:
-            poster_urls.append("")
+    explanations = []
+    base = df.iloc[idx]
 
-    return titles, overviews, poster_urls
+    for i in movie_indices:
+        rec = df.iloc[i]
+
+        movie_id = rec['id'] if 'id' in rec else None
+        if movie_id:
+            url = f"https://api.themoviedb.org/3/movie/{movie_id}?api_key={API_KEY}"
+            response = requests.get(url)
+            data = response.json()
+            poster_path = data.get('poster_path')
+            poster_urls.append(BASE_URL + poster_path if poster_path else "https://via.placeholder.com/500x750?text=No+Image")
+        else:
+            poster_urls.append("https://via.placeholder.com/500x750?text=No+Image")
+
+        shared_genres = set(base['genres'].split()) & set(rec['genres'].split())
+        shared_cast = set(base['cast'].split()) & set(rec['cast'].split())
+
+        parts = []
+        if shared_genres:
+            parts.append(f"shared genres: {', '.join(shared_genres)}")
+        if shared_cast:
+            parts.append(f"{len(shared_cast)} actors in common: {', '.join(shared_cast)}")
+
+        explanations.append(f"Why Recommended? {', and '.join(parts)}." if parts else
+                            "These movies are recommended based on similarity but have no direct genre or cast overlap.")
+
+    return titles, overviews, poster_urls, explanations
+
 
 
 def collaborative_recommender(movie_title, top_k=5):
     if movie_title not in cosine_df.index:
-        return ["Movie Not Found"]*top_k, [""]*top_k, [""]*top_k
+        return ["Movie Not Found"]*top_k, [""]*top_k, ["https://via.placeholder.com/500x750?text=No+Image"]*top_k, [""]*top_k
 
     distances, indices = model_knn.kneighbors(
         cosine_df.loc[movie_title].values.reshape(1, -1),
         n_neighbors=top_k + 1
     )
 
-    movie_indices = indices.flatten()[1:]
-    titles, overviews, poster_urls = [], [], []
+    movie_indices = indices.flatten()[1:] 
+    titles, overviews, poster_urls, explanations = [], [], [], []
+
+    base_row = df[df['title'] == movie_title].iloc[0]
 
     for idx in movie_indices:
         title = cosine_df.index[idx]
         row = df[df['title'] == title]
+
         titles.append(title)
         overviews.append(row['overview'].values[0] if not row.empty and 'overview' in row.columns else "")
 
@@ -103,11 +125,27 @@ def collaborative_recommender(movie_title, top_k=5):
             response = requests.get(url)
             data = response.json()
             poster_path = data.get('poster_path')
-            poster_urls.append(BASE_URL + poster_path if poster_path else "")
+            poster_urls.append(BASE_URL + poster_path if poster_path else "https://via.placeholder.com/500x750?text=No+Image")
         else:
-            poster_urls.append("")
+            poster_urls.append("https://via.placeholder.com/500x750?text=No+Image")
 
-    return titles, overviews, poster_urls
+        rec_row = row.iloc[0] if not row.empty else None
+        explanation_parts = []
+        if rec_row is not None:
+            shared_genres = set(base_row['genres'].split()) & set(rec_row['genres'].split())
+            shared_cast = set(base_row['cast'].split()) & set(rec_row['cast'].split())
+            if shared_genres:
+                explanation_parts.append(f"shared genres: {', '.join(shared_genres)}")
+            if shared_cast:
+                explanation_parts.append(f"{len(shared_cast)} actors in common: {', '.join(shared_cast)}")
+
+        if explanation_parts:
+            explanations.append(f"Why Recommended? {', and '.join(explanation_parts)}.")
+        else:
+            explanations.append("Recommended based on user behavior similarity.")
+
+    return titles, overviews, poster_urls, explanations
+
 
 
 def hybrid_recommender(user_input, top_k=5):
@@ -163,23 +201,48 @@ def hybrid_recommender(user_input, top_k=5):
             poster_urls.append(BASE_URL + poster_path if poster_path else "")
         else:
             poster_urls.append("")
+    explanations = []
+    return recommended_titles, recommended_overviews, poster_urls , explanations
 
-    return recommended_titles, recommended_overviews, poster_urls
+
+def generate_explanation(base_title, recommended_title , ):
+    base = df[df['title'] == base_title].iloc[0]
+    rec = df[df['title'] == recommended_title].iloc[0]
+
+    shared_genres = set(base['genres'].split()) & set(rec['genres'].split())
+    shared_cast = set(base['cast'].split()) & set(rec['cast'].split())
+
+    explanation_parts = []
+    if shared_genres:
+        explanation_parts.append(f"shared genres: {', '.join(shared_genres)}")
+    if shared_cast:
+        explanation_parts.append(f"{len(shared_cast)} actors in common: {', '.join(shared_cast)}")
+
+    if explanation_parts:
+        return f"Why Recommended? {', and '.join(explanation_parts)}."
+    else:
+        return "These movies are recommended based on similarity but have no direct genre or cast overlap."
 
 
 def recommend_movies(user_input, model_type):
     if model_type == "Popularity":
         titles, overviews, poster_urls = popularity_recommender(user_input)
+        explanations = ["Recommended based on popularity scores."]
     elif model_type == "Content-Based":
-        titles, overviews, poster_urls = content_recommender(user_input)
+        titles, overviews, poster_urls, explanations = content_recommender(user_input)
     elif model_type == "Collaborative Filtering":
-        titles, overviews, poster_urls = collaborative_recommender(user_input)
+        titles, overviews, poster_urls , explanations= collaborative_recommender(user_input)
     elif model_type == "Hybrid":
-        titles, overviews, poster_urls = hybrid_recommender(user_input)
+        titles, overviews, poster_urls , explanations = hybrid_recommender(user_input)
     else:
-        titles, overviews, poster_urls = (["No Recommendation"], [""], [""])
-    
-    return "\n".join(titles), "\n\n".join(overviews), poster_urls
+        titles, overviews, poster_urls, explanations = (["No Recommendation"], [""], [""], [""])
+
+    output_text = "\n".join(titles)
+    output_explanation = "\n\n".join(explanations)
+    output_overview = "\n\n".join(overviews)
+
+    return output_text, output_explanation, output_overview, poster_urls 
+
 
 
 with gr.Blocks() as demo:
@@ -190,7 +253,7 @@ with gr.Blocks() as demo:
         textbox = gr.Textbox(
             lines=1,
             placeholder="Type here...",
-            label="Enter Movie Title Or UserID",
+            label="Movie Title Or UserID(Hybrid Model)",
             show_label=True
         )
         model_dropdown = gr.Dropdown(
@@ -201,13 +264,14 @@ with gr.Blocks() as demo:
     button = gr.Button("Recommend", variant="primary")
     
     output_text = gr.Textbox(label="Movie Titles", lines=5)
+    output_explanation = gr.Textbox(label="Why Recommended?", lines=10)
     output_overview = gr.Textbox(label="Movie Description", lines=5)
     output_poster = output_poster = gr.Gallery(label="Movie Posters",show_label=True,elem_id=None,columns=5)
     
     button.click(
         fn=recommend_movies,
         inputs=[textbox, model_dropdown],
-        outputs=[output_text, output_overview, output_poster]
+        outputs=[output_text, output_explanation, output_overview, output_poster]
     )
 
 demo.launch(share=True)
