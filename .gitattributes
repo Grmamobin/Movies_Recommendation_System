@@ -1,7 +1,5 @@
-src/models/*.pkl export-ignore
+# Track all CSV files in LFS
 data/*.csv filter=lfs diff=lfs merge=lfs -text
+
+# Track all pickle files in LFS
 src/models/*.pkl filter=lfs diff=lfs merge=lfs -text
-*.pkl filter=lfs diff=lfs merge=lfs -text
-data/ratings.csv filter=lfs diff=lfs merge=lfs -text
-data/credits.csv filter=lfs diff=lfs merge=lfs -text
-models/*.pkl filter=lfs diff=lfs merge=lfs -text
