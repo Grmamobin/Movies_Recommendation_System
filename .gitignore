@@ -1,4 +1,3 @@
 venv/
 # Ignore all pickle files
-*.pkl
 .DS_Store
