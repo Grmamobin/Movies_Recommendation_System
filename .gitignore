@@ -1,5 +1,6 @@
 venv/
 # Ignore all pickle files
 .DS_Store
-.*pkl
-data/.*pkl
+# Ignore model pickle files
+/src/models/*.pkl
+data/*.csv
